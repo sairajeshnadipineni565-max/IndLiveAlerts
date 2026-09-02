@@ -1,0 +1,57 @@
+name: NSE Scanner - Afternoon Shift
+
+# Triggers 06:30 UTC = 12:00 PM IST -- 30 min buffer before the 12:30 PM
+# handoff from the morning shift. Runs until 15:35 IST (5 min past the
+# 15:30 close, to catch the final bar).
+on:
+  schedule:
+    - cron: '30 6 * * 1-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 270   # 4.5h safety cap, comfortably above worst-case (~3h37)
+    env:
+      FYERS_CLIENT_ID: ${{ secrets.FYERS_CLIENT_ID }}
+      FYERS_ACCESS_TOKEN: ${{ secrets.FYERS_ACCESS_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      SCAN_START_TIME: "12:30"
+      SCAN_END_TIME: "15:35"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify today's Fyers token is set
+        run: |
+          if [ -z "$FYERS_ACCESS_TOKEN" ]; then
+            echo "::error::FYERS_ACCESS_TOKEN secret is empty. Run 'python fyers_auth.py' locally this morning and paste the token into the repo's FYERS_ACCESS_TOKEN secret before market open."
+            exit 1
+          fi
+
+      - name: Run afternoon shift (both scanners)
+        run: python run_shift.py
+
+      - name: Commit updated alert log
+        if: always()
+        run: |
+          if [ -f alerts.db ]; then
+            git config user.name "nse-scanner-bot"
+            git config user.email "actions@github.com"
+            git add alerts.db
+            git pull --rebase --autostash
+            git diff --staged --quiet || git commit -m "Log alerts: afternoon shift $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "No alerts.db created this run (empty watchlist?) -- nothing to commit."
+          fi

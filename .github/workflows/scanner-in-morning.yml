@@ -1,0 +1,58 @@
+name: NSE Scanner - Morning Shift
+
+# Triggers 03:15 UTC = 8:45 AM IST -- 30 min buffer before the real 9:15 AM
+# open; the scripts wait internally (via SCAN_START_TIME below) until the
+# real open, so this is just idle time, not early alerts. IST has no DST,
+# so unlike the US version this only needs one cron schedule.
+on:
+  schedule:
+    - cron: '15 3 * * 1-5'
+  workflow_dispatch: {}   # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write   # needed to commit alerts.db back at the end
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 270   # 4.5h safety cap, comfortably above worst-case (~3h47)
+    env:
+      FYERS_CLIENT_ID: ${{ secrets.FYERS_CLIENT_ID }}
+      FYERS_ACCESS_TOKEN: ${{ secrets.FYERS_ACCESS_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      SCAN_START_TIME: "09:15"
+      SCAN_END_TIME: "12:30"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify today's Fyers token is set
+        run: |
+          if [ -z "$FYERS_ACCESS_TOKEN" ]; then
+            echo "::error::FYERS_ACCESS_TOKEN secret is empty. Run 'python fyers_auth.py' locally this morning and paste the token into the repo's FYERS_ACCESS_TOKEN secret before market open."
+            exit 1
+          fi
+
+      - name: Run morning shift (both scanners)
+        run: python run_shift.py
+
+      - name: Commit updated alert log
+        if: always()   # commit whatever alerts fired even if the job errored partway through
+        run: |
+          if [ -f alerts.db ]; then
+            git config user.name "nse-scanner-bot"
+            git config user.email "actions@github.com"
+            git add alerts.db
+            git pull --rebase --autostash
+            git diff --staged --quiet || git commit -m "Log alerts: morning shift $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "No alerts.db created this run (empty watchlist?) -- nothing to commit."
+          fi
