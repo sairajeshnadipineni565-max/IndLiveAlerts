@@ -1,0 +1,23 @@
+{
+  "NSE:RELIANCE-EQ": {
+    "resistance": 2950,
+    "support": 2870,
+    "pivot_level": null,
+    "setup": "VCP breakout",
+    "description": "3-week tight base, watching for volume breakout above 2950"
+  },
+  "NSE:TCS-EQ": {
+    "resistance": 4200,
+    "support": 4050,
+    "pivot_level": null,
+    "setup": "",
+    "description": ""
+  },
+  "NSE:HDFCBANK-EQ": {
+    "resistance": null,
+    "support": null,
+    "pivot_level": 1680,
+    "setup": "30-min pivot watch",
+    "description": ""
+  }
+}
