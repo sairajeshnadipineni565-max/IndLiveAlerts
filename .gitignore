@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+access_token.txt
+access_token_date.txt
